@@ -43,9 +43,10 @@ const getTagsWithHashes = metadata => {
 
 	Object.entries(metadata).forEach(([ hash, { tags }]) => {
 		tags.forEach(({ tag }) => {
-			const hashes = tagsToHashes.get(tag) || []
+			const lowercaseTag = tag.toLowerCase()
+			const hashes = tagsToHashes.get(lowercaseTag) || []
 			hashes.push(hash)
-			tagsToHashes.set(tag, hashes)
+			tagsToHashes.set(lowercaseTag, hashes)
 		})
 	})
 
