@@ -1,0 +1,28 @@
+{
+  "name": "obsidian-tag-pages",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "bin": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TehShrike/obsidian-tag-pages.git"
+  },
+  "keywords": [
+    "obsidian"
+  ],
+  "author": "TehShrike",
+  "license": "WTFPL",
+  "bugs": {
+    "url": "https://github.com/TehShrike/obsidian-tag-pages/issues"
+  },
+  "homepage": "https://github.com/TehShrike/obsidian-tag-pages#readme",
+  "dependencies": {
+    "make-dir": "^3.1.0",
+    "pify": "^5.0.0",
+    "untildify": "^4.0.0"
+  }
+}
