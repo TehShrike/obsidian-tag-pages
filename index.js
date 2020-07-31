@@ -9,7 +9,8 @@ const makeDir = require(`make-dir`)
 
 const mdExtension = `.md`
 
-const main = async({ path, tagFolder }) => {
+const main = async({ path, tagFolder, minimumTaggedNotes: minimumTaggedNotesString }) => {
+	const minimumTaggedNotes = parseInt(minimumTaggedNotesString, 10)
 	const vaultPath = untildify(path)
 	const tagPath = joinPath(vaultPath, tagFolder)
 
@@ -27,7 +28,7 @@ const main = async({ path, tagFolder }) => {
 				.map(hash => hashesToFileMetadata.get(hash))
 				.filter(metadata => metadata)
 
-			if (metadatas.length) {
+			if (metadatas.length > minimumTaggedNotes) {
 				const contents = metadatas.sort(({ mtime: a }, { mtime: b }) => a - b)
 					.map(({ title }) => `- [[${ title }]]`)
 					.join(`\n`)
@@ -68,9 +69,9 @@ const getHashesToFileMetadata = files => {
 
 
 
-const [ ,, path, tagFolder = `Tags` ] = process.argv
+const [ ,, path, tagFolder = `Tags`, minimumTaggedNotes = `1` ] = process.argv
 
-main({ path, tagFolder }).catch(err => {
+main({ path, tagFolder, minimumTaggedNotes }).catch(err => {
 	console.error(err)
 	process.exit(1)
 })
