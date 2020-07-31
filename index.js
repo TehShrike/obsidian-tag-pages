@@ -9,6 +9,28 @@ const makeDir = require(`make-dir`)
 
 const mdExtension = `.md`
 
+const groupByFolder = metadatas => {
+	const grouped = Object.create(null)
+
+	metadatas.forEach(metadata => {
+		const name = metadata.title
+		const splitOnSlashes = name.split(/\//g)
+
+		const title = splitOnSlashes.pop()
+		const heading = splitOnSlashes.join(` – `)
+
+		grouped[heading] = grouped[heading] || []
+		grouped[heading].push({
+			...metadata,
+			title,
+		})
+	})
+
+	return grouped
+}
+
+const joinish = (prefix, title) => prefix ? `${ prefix }/${ title }` : title
+
 const main = async({ path, tagFolder, minimumTaggedNotes: minimumTaggedNotesString }) => {
 	const minimumTaggedNotes = parseInt(minimumTaggedNotesString, 10)
 	const vaultPath = untildify(path)
@@ -29,8 +51,19 @@ const main = async({ path, tagFolder, minimumTaggedNotes: minimumTaggedNotesStri
 				.filter(metadata => metadata)
 
 			if (metadatas.length > minimumTaggedNotes) {
-				const contents = metadatas.sort(({ mtime: a }, { mtime: b }) => a - b)
-					.map(({ title }) => `- [[${ title }]]`)
+				const grouped = groupByFolder(metadatas)
+
+				const contents = `\n` + Object.entries(grouped)
+					.sort(([ headingA ], [ headingB ]) => headingA.localeCompare(headingB))
+					.map(([ heading, metadatas ]) => {
+						const list = metadatas.sort(({ mtime: a }, { mtime: b }) => a - b)
+							.map(({ title }) => `- [[${ joinish(heading, title) }|${ title }]]`)
+							.join(`\n`)
+
+						return heading
+							? `## ${ heading }\n\n${ list }\n`
+							: `${ list }\n`
+					})
 					.join(`\n`)
 
 				await writeFile(joinPath(tagPath, tag.slice(1) + mdExtension), contents)
