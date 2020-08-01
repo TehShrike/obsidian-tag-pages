@@ -50,7 +50,7 @@ const main = async({ path, tagFolder, minimumTaggedNotes: minimumTaggedNotesStri
 				.map(hash => hashesToFileMetadata.get(hash))
 				.filter(metadata => metadata)
 
-			if (metadatas.length > minimumTaggedNotes) {
+			if (metadatas.length >= minimumTaggedNotes) {
 				const grouped = groupByFolder(metadatas)
 
 				const contents = `\n` + Object.entries(grouped)
