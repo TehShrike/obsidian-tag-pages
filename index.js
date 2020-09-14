@@ -2,11 +2,13 @@
 
 const pify = require(`pify`)
 const { readFile, writeFile } = pify(require(`fs`))
-const { join: joinPath } = require(`path`)
+const { join: joinPath, delimiter } = require(`path`)
 
 const untildify = require(`untildify`)
 const makeDir = require(`make-dir`)
 const pMap = require(`p-map`)
+
+const getObsidianAppPath = require(`./app-path`)
 
 const mdExtension = `.md`
 
@@ -36,23 +38,39 @@ const joinNameAndHeading = (name, heading) => heading ? `${ name }#${ heading }`
 const getPreviousHeading = (contents, line) => {
 	const lines = contents.split(`\n`)
 
-	let lastHeading = null
-	for (let i = 0; i < line; ++i) {
+	for (let i = line; i >= 0; --i) {
 		const match = lines[i].match(/^#+[ \t]+(.+)$/)
 		if (match) {
-			lastHeading = match[1].replace(/#/g, ``)
+			return match[1].replace(/#/g, ``)
 		}
 	}
 
-	return lastHeading
+	return null
+}
+
+const getObsidianVaultId = async(obsidianAppPath, vaultPath) => {
+	const obsidianJsonFilePath = joinPath(obsidianAppPath, `obsidian.json`)
+	const { vaults } = JSON.parse(await readFile(obsidianJsonFilePath, { encoding: `utf8` }))
+
+	const matchingEntry = Object.entries(vaults).find(
+		([ , { path }]) => vaultPath === path || vaultPath === path + delimiter,
+	)
+
+	if (!matchingEntry) {
+		throw new Error(`No vault found with path ` + vaultPath)
+	}
+
+	return matchingEntry[0]
 }
 
 const main = async({ path, tagFolder, minimumTaggedNotes: minimumTaggedNotesString }) => {
 	const minimumTaggedNotes = parseInt(minimumTaggedNotesString, 10)
+	const obsidianAppPath = getObsidianAppPath()
 	const vaultPath = untildify(path)
+	const vaultId = await getObsidianVaultId(obsidianAppPath, vaultPath)
 	const tagPath = joinPath(vaultPath, tagFolder)
 
-	const cachePath = joinPath(vaultPath, `.obsidian`, `cache`)
+	const cachePath = joinPath(obsidianAppPath, `ObsidianCache`, vaultId + `.json`)
 	const cacheContents = JSON.parse(await readFile(cachePath))
 
 	await makeDir(tagPath)
@@ -109,7 +127,8 @@ const getTagsWithHashes = metadata => {
 	const tagsToHashes = new Map()
 
 	Object.entries(metadata).forEach(([ hash, { tags }]) => {
-		tags.forEach(({ tag, line }) => {
+		tags.forEach(({ tag, position }) => {
+			const line = position.start.line
 			const lowercaseTag = tag.toLowerCase()
 			const hashesAndLines = tagsToHashes.get(lowercaseTag) || []
 			hashesAndLines.push({ hash, line })
