@@ -6,6 +6,7 @@ const { join: joinPath } = require(`path`)
 
 const untildify = require(`untildify`)
 const makeDir = require(`make-dir`)
+const pMap = require(`p-map`)
 
 const mdExtension = `.md`
 
@@ -29,7 +30,22 @@ const groupByFolder = metadatas => {
 	return grouped
 }
 
-const joinish = (prefix, title) => prefix ? `${ prefix }/${ title }` : title
+const joinFolderAndTitle = (folder, title) => folder ? `${ folder }/${ title }` : title
+const joinNameAndHeading = (name, heading) => heading ? `${ name }#${ heading }` : name
+
+const getPreviousHeading = (contents, line) => {
+	const lines = contents.split(`\n`)
+
+	let lastHeading = null
+	for (let i = 0; i < line; ++i) {
+		const match = lines[i].match(/^#+[ \t]+(.+)$/)
+		if (match) {
+			lastHeading = match[1].replace(/#/g, ``)
+		}
+	}
+
+	return lastHeading
+}
 
 const main = async({ path, tagFolder, minimumTaggedNotes: minimumTaggedNotesString }) => {
 	const minimumTaggedNotes = parseInt(minimumTaggedNotesString, 10)
@@ -44,31 +60,48 @@ const main = async({ path, tagFolder, minimumTaggedNotes: minimumTaggedNotesStri
 	const tagsWithHashes = getTagsWithHashes(cacheContents.metadata)
 	const hashesToFileMetadata = getHashesToFileMetadata(cacheContents.files)
 
-	await Promise.all(
-		tagsWithHashes.map(async({ tag, hashes }) => {
-			const metadatas = hashes
-				.map(hash => hashesToFileMetadata.get(hash))
-				.filter(metadata => metadata)
+	await pMap(
+		tagsWithHashes,
+		async({ tag, hashesAndLines }) => {
+			const metadataAndLines = hashesAndLines
+				.map(({ hash, line }) => ({
+					line,
+					metadata: hashesToFileMetadata.get(hash),
+				}))
+				.filter(({ metadata }) => metadata)
+
+			const metadatas = await pMap(metadataAndLines, async({ metadata: { title, mtime, filename }, line }) => {
+				const contents = await readFile(joinPath(vaultPath, filename), { encoding: `utf8` })
+
+				const heading = getPreviousHeading(contents, line)
+
+				return {
+					heading,
+					title,
+					mtime,
+				}
+			}, { concurrency: 5 })
 
 			if (metadatas.length >= minimumTaggedNotes) {
 				const grouped = groupByFolder(metadatas)
 
 				const contents = `\n` + Object.entries(grouped)
-					.sort(([ headingA ], [ headingB ]) => headingA.localeCompare(headingB))
-					.map(([ heading, metadatas ]) => {
+					.sort(([ folderA ], [ folderB ]) => folderA.localeCompare(folderB))
+					.map(([ folder, metadatas ]) => {
 						const list = metadatas.sort(({ mtime: a }, { mtime: b }) => a - b)
-							.map(({ title }) => `- [[${ joinish(heading, title) }|${ title }]]`)
+							.map(({ title, heading }) => `- [[${ joinNameAndHeading(joinFolderAndTitle(folder, title), heading) }|${ joinNameAndHeading(title, heading) }]]`)
 							.join(`\n`)
 
-						return heading
-							? `## ${ heading }\n\n${ list }\n`
+						return folder
+							? `## ${ folder }\n\n${ list }\n`
 							: `${ list }\n`
 					})
 					.join(`\n`)
 
 				await writeFile(joinPath(tagPath, tag.slice(1) + mdExtension), contents)
 			}
-		}),
+		},
+		{ concurrency: 2 },
 	)
 }
 
@@ -76,17 +109,17 @@ const getTagsWithHashes = metadata => {
 	const tagsToHashes = new Map()
 
 	Object.entries(metadata).forEach(([ hash, { tags }]) => {
-		tags.forEach(({ tag }) => {
+		tags.forEach(({ tag, line }) => {
 			const lowercaseTag = tag.toLowerCase()
-			const hashes = tagsToHashes.get(lowercaseTag) || []
-			hashes.push(hash)
-			tagsToHashes.set(lowercaseTag, hashes)
+			const hashesAndLines = tagsToHashes.get(lowercaseTag) || []
+			hashesAndLines.push({ hash, line })
+			tagsToHashes.set(lowercaseTag, hashesAndLines)
 		})
 	})
 
 	const entries = [ ...tagsToHashes.entries() ]
 
-	return entries.map(([ tag, hashes ]) => ({ tag, hashes }))
+	return entries.map(([ tag, hashesAndLines ]) => ({ tag, hashesAndLines }))
 }
 
 const getHashesToFileMetadata = files => {
@@ -94,7 +127,7 @@ const getHashesToFileMetadata = files => {
 
 	Object.entries(files).forEach(([ filename, { mtime, hash }]) => {
 		const title = filename.slice(0, -mdExtension.length)
-		hashesToFileMetadata.set(hash, { title, mtime })
+		hashesToFileMetadata.set(hash, { title, mtime, filename })
 	})
 
 	return hashesToFileMetadata
